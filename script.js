@@ -110,7 +110,7 @@ function estiloEntidad(feature) {
     weight: 1,
     opacity: 1,
     color: "#666",
-    fillOpacity: 0.4
+    fillOpacity: 0.2
   };
 }
 
