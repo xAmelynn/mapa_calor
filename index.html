@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mapa de salud</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
+  />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
+  />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="map-topbar" role="banner">
+    <div class="brand-block">
+      <span class="brand-eyebrow">Mapa de salud</span>
+      <strong id="topbarTitulo">Índice de salud</strong>
+    </div>
+    <div class="topbar-status" aria-live="polite">
+      <span id="contadorTopbar">0</span> unidades visibles
+    </div>
+  </div>
+
+  <div class="layer-switcher" aria-label="Capas del mapa">
+    <div class="layer-switcher-title">Capas</div>
+    <button class="layer-toggle is-active" type="button" data-layer-toggle="indices" aria-pressed="true">
+      <span class="layer-icon layer-icon-indices" aria-hidden="true"></span>
+      <span>Índice</span>
+    </button>
+    <button class="layer-toggle is-active" type="button" data-layer-toggle="unidades" aria-pressed="true">
+      <span class="layer-icon layer-icon-unidades" aria-hidden="true"></span>
+      <span>Unidades</span>
+    </button>
+  </div>
+
+  <button id="btnFiltros" class="toggle-filtros" type="button" aria-label="Abrir filtros">☰ Filtros</button>
+  <button id="btnDetalle" class="toggle-detalle" type="button" aria-label="Abrir detalle de unidad">ℹ Detalle</button>
+
+  <aside id="panelFiltros" class="sidebar sidebar-left abierto">
+    <div class="sidebar-header">
+      <div>
+        <h2>Indicadores de salud</h2>
+        <p>Filtra unidades y explora el mapa</p>
+      </div>
+      <div class="header-actions">
+        <button id="btnMinimizarFiltros" class="btn-cerrar" type="button" title="Minimizar filtros">—</button>
+        <button class="btn-cerrar" data-close="panelFiltros" type="button" title="Cerrar filtros">✕</button>
+      </div>
+    </div>
+
+    <div class="sidebar-scroll">
+      <div class="panel-bloque">
+        <label for="indicador">Indicador</label>
+        <select id="indicador">
+          <option value="camas">Camas</option>
+          <option value="medicos">Médicos</option>
+          <option value="consultorios">Consultorios</option>
+        </select>
+      </div>
+
+      <div class="panel-bloque">
+        <label for="sector">Sector</label>
+        <select id="sector">
+          <option value="total">General</option>
+          <option value="publico">Público</option>
+          <option value="privado">Privado</option>
+        </select>
+      </div>
+
+      <div class="panel-bloque">
+        <div id="titulo-mapa" class="titulo-mapa"></div>
+      </div>
+
+      <div class="panel-bloque resumen-filtros">
+        <div><strong id="contadorResultados">0</strong> unidades visibles</div>
+        <div class="acciones-filtros">
+          <button id="btnLimpiarFiltros" class="btn-secundario" type="button">Limpiar filtros</button>
+          <button id="btnZoomResultados" class="btn-secundario" type="button">Acercar a resultados</button>
+          <button id="btnVistaNacional" class="btn-secundario" type="button">Vista nacional</button>
+          <button id="btnExportarCsv" class="btn-secundario" type="button">Exportar CSV</button>
+        </div>
+      </div>
+
+      <div class="panel-bloque">
+        <label>Filtros activos</label>
+        <div id="chipsActivos" class="chips-activos">
+          <span class="chip-placeholder">No hay filtros activos</span>
+        </div>
+      </div>
+
+      <div class="panel-bloque">
+        <details open>
+          <summary>Cobertura</summary>
+
+          <label for="radioCobertura">Radio de cobertura</label>
+          <select id="radioCobertura">
+            <option value="5">5 km</option>
+            <option value="10" selected>10 km</option>
+            <option value="20">20 km</option>
+          </select>
+
+          <div class="switch-row">
+            <input type="checkbox" id="toggleCoberturaIndividual" checked>
+            <label for="toggleCoberturaIndividual">Mostrar radio al seleccionar unidad</label>
+          </div>
+
+          <div class="switch-row">
+            <input type="checkbox" id="toggleCoberturaGlobal">
+            <label for="toggleCoberturaGlobal">Mostrar radios de todas las unidades visibles</label>
+          </div>
+        </details>
+      </div>
+
+      <div class="panel-bloque">
+        <details>
+          <summary>Institución</summary>
+          <div class="filter-toolbar">
+            <div class="search-box">
+              <input type="text" id="buscarInstitucion" placeholder="Buscar institución..." />
+            </div>
+            <button class="btn-link" type="button" data-select-all="institucion">Seleccionar visibles</button>
+          </div>
+          <div id="filtroInstitucion" class="checkbox-list"></div>
+        </details>
+      </div>
+
+      <div class="panel-bloque">
+        <details>
+          <summary>Ubicación</summary>
+          <div class="subfiltro-titulo">Entidad</div>
+          <div class="filter-toolbar">
+            <div class="search-box">
+              <input type="text" id="buscarEntidad" placeholder="Buscar entidad..." />
+            </div>
+            <button class="btn-link" type="button" data-select-all="entidad">Seleccionar visibles</button>
+          </div>
+          <div id="filtroEntidad" class="checkbox-list"></div>
+
+          <div class="subfiltro-titulo">Municipio</div>
+          <div class="filter-toolbar">
+            <div class="search-box">
+              <input type="text" id="buscarMunicipio" placeholder="Buscar municipio..." />
+            </div>
+            <button class="btn-link" type="button" data-select-all="municipio">Seleccionar visibles</button>
+          </div>
+          <div id="filtroMunicipio" class="checkbox-list"></div>
+        </details>
+      </div>
+
+      <div class="panel-bloque">
+        <details>
+          <summary>Clasificación</summary>
+          <div class="subfiltro-titulo">Tipo de establecimiento</div>
+          <div class="filter-toolbar">
+            <div class="search-box">
+              <input type="text" id="buscarTipo" placeholder="Buscar tipo..." />
+            </div>
+            <button class="btn-link" type="button" data-select-all="tipo">Seleccionar visibles</button>
+          </div>
+          <div id="filtroTipo" class="checkbox-list"></div>
+
+          <div class="subfiltro-titulo">Tipología</div>
+          <div class="filter-toolbar">
+            <div class="search-box">
+              <input type="text" id="buscarTipologia" placeholder="Buscar tipología..." />
+            </div>
+            <button class="btn-link" type="button" data-select-all="tipologia">Seleccionar visibles</button>
+          </div>
+          <div id="filtroTipologia" class="checkbox-list"></div>
+        </details>
+      </div>
+    </div>
+  </aside>
+
+  <aside id="panelDetalle" class="sidebar sidebar-right">
+    <div class="sidebar-header">
+      <div>
+        <h2>Detalle de unidad</h2>
+        <p>Selecciona una unidad en el mapa</p>
+      </div>
+      <button class="btn-cerrar" data-close="panelDetalle" type="button" title="Cerrar detalle">✕</button>
+    </div>
+
+    <div id="detalleContenido" class="detalle-vacio">
+      <div class="placeholder-card">
+        <h3>Aún no hay una unidad seleccionada</h3>
+        <p>Haz clic sobre un marcador para ver su información aquí.</p>
+      </div>
+    </div>
+  </aside>
+
+  <div id="sinResultados" class="sin-resultados oculto">
+    <strong>Sin resultados</strong>
+    <span>Prueba con menos filtros o limpia la selección.</span>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
