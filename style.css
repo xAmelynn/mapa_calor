@@ -641,3 +641,12 @@ body.detalle-abierto .toggle-detalle {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Estado del selector de sector cuando el indicador solo tiene datos públicos */
+.panel-bloque select:disabled {
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: not-allowed;
+  border-color: #e2e8f0;
+}

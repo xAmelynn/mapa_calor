@@ -89,9 +89,15 @@ function obtenerCampo() {
       publico: "indice_medicos_publico",
       privado: "indice_medicos_privado",
       total: "indice_medicos_total"
+    },
+    consultorios: {
+      publico: "indice_consultorios_publico",
+      privado: "indice_consultorios_publico",
+      total: "indice_consultorios_publico"
     }
   };
-  return campos[indicadorActual][sectorActual];
+
+  return campos[indicadorActual]?.[sectorActual] || campos.camas.total;
 }
 
 function getColor(valor) {
@@ -126,14 +132,141 @@ function formatearNumero(valor) {
 }
 
 function nombreIndicador() {
-  return indicadorActual === "camas" ? "camas" : "médicos";
+  if (indicadorActual === "camas") return "camas";
+  if (indicadorActual === "medicos") return "médicos";
+  if (indicadorActual === "consultorios") return "consultorios";
+  return "salud";
 }
 
 function nombreSector() {
+  if (indicadorActual === "consultorios") return "Público";
   if (sectorActual === "publico") return "Público";
   if (sectorActual === "privado") return "Privado";
   return "General";
 }
+
+function actualizarDisponibilidadSector() {
+  if (!sectorSelect) return;
+
+  if (indicadorActual === "consultorios") {
+    sectorActual = "publico";
+    sectorSelect.value = "publico";
+    sectorSelect.disabled = true;
+    sectorSelect.title = "El indicador de consultorios solo está disponible para el sector público.";
+  } else {
+    sectorSelect.disabled = false;
+    sectorSelect.title = "";
+  }
+}
+
+function limpiarNumero(valor) {
+  if (valor === null || valor === undefined || valor === "") return null;
+  const texto = String(valor).replace(/,/g, "").trim();
+  const numero = Number(texto);
+  return Number.isFinite(numero) ? numero : null;
+}
+
+function parseCSV(texto) {
+  const lineas = texto.replace(/^\uFEFF/, "").trim().split(/\r?\n/);
+  if (!lineas.length) return [];
+
+  const separador = (lineas[0].match(/;/g) || []).length > (lineas[0].match(/,/g) || []).length ? ";" : ",";
+  const filas = [];
+  let fila = [];
+  let celda = "";
+  let dentroComillas = false;
+
+  for (let i = 0; i < texto.length; i++) {
+    const char = texto[i];
+    const siguiente = texto[i + 1];
+
+    if (char === '"' && dentroComillas && siguiente === '"') {
+      celda += '"';
+      i++;
+    } else if (char === '"') {
+      dentroComillas = !dentroComillas;
+    } else if (char === separador && !dentroComillas) {
+      fila.push(celda);
+      celda = "";
+    } else if ((char === "\n" || char === "\r") && !dentroComillas) {
+      if (char === "\r" && siguiente === "\n") i++;
+      fila.push(celda);
+      if (fila.some(valor => valor.trim() !== "")) filas.push(fila);
+      fila = [];
+      celda = "";
+    } else {
+      celda += char;
+    }
+  }
+
+  if (celda || fila.length) {
+    fila.push(celda);
+    if (fila.some(valor => valor.trim() !== "")) filas.push(fila);
+  }
+
+  const encabezados = filas.shift().map(h => normalizarTexto(h).replace(/\s+/g, "_"));
+  return filas.map(valores => {
+    const obj = {};
+    encabezados.forEach((h, i) => {
+      obj[h] = valores[i] !== undefined ? valores[i].trim() : "";
+    });
+    return obj;
+  });
+}
+
+async function cargarConsultorios() {
+  const rutas = [
+    "data/consultorios.csv",
+    "/data/consultorios.csv"
+  ];
+
+  for (const ruta of rutas) {
+    try {
+      const response = await fetch(ruta);
+      if (!response.ok) continue;
+      const texto = await response.text();
+      return parseCSV(texto);
+    } catch (error) {
+      console.warn(`No se pudo cargar ${ruta}`, error);
+    }
+  }
+
+  console.warn("No se encontró consultorios.csv en /data.");
+  return [];
+}
+
+function integrarConsultorios(geojson, filasConsultorios) {
+  const datosPorEntidad = new Map(
+    filasConsultorios.map(row => [
+      normalizarTexto(row.entidad),
+      {
+        consultorios: limpiarNumero(row.numero_consultorios),
+        poblacion: limpiarNumero(row.poblacion),
+        indice: limpiarNumero(row.indice)
+      }
+    ])
+  );
+
+  geojson.features.forEach(feature => {
+    const props = feature.properties || {};
+    const nombreEntidad = props.ENTIDAD || props.entidad || props.NOMGEO || props.nom_ent;
+    const extra = datosPorEntidad.get(normalizarTexto(nombreEntidad));
+
+    if (!extra) return;
+
+    props.consultorios_publicos = extra.consultorios;
+    props.consultorios_totales = extra.consultorios;
+    props.indice_consultorios_publico = extra.indice;
+    props.indice_consultorios_total = extra.indice;
+
+    if (!props.poblacion && extra.poblacion !== null) {
+      props.poblacion = extra.poblacion;
+    }
+  });
+
+  return geojson;
+}
+
 
 function actualizarTitulo() {
   tituloMapa.textContent = `Índice de ${nombreIndicador()} - ${nombreSector()}`;
@@ -157,7 +290,10 @@ function popupContenidoEntidad(props) {
       Privados: ${Number(props.medicos_privados || 0).toLocaleString("es-MX")}<br>
       Índice privado: ${formatearNumero(props.indice_medicos_privado)}<br>
       Totales: ${Number(props.medicos_total || 0).toLocaleString("es-MX")}<br>
-      Índice total: ${formatearNumero(props.indice_medicos_total)}
+      Índice total: ${formatearNumero(props.indice_medicos_total)}<br><br>
+      <strong>Consultorios públicos</strong><br>
+      Consultorios: ${Number(props.consultorios_publicos || 0).toLocaleString("es-MX")}<br>
+      Índice público: ${formatearNumero(props.indice_consultorios_publico)}
     </div>
   `;
 }
@@ -696,16 +832,21 @@ legend.onAdd = function () {
   return div;
 };
 
+actualizarDisponibilidadSector();
 actualizarTitulo();
 actualizarEstadoBotones();
 
-fetch("data/entidades_salud.geojson")
-  .then((response) => {
+Promise.all([
+  fetch("data/entidades_salud.geojson").then((response) => {
     if (!response.ok) throw new Error(`No se pudo cargar el archivo: ${response.status}`);
     return response.json();
-  })
-  .then((data) => {
-    capaEntidades = L.geoJSON(data, {
+  }),
+  cargarConsultorios()
+])
+  .then(([data, consultorios]) => {
+    const entidadesConConsultorios = integrarConsultorios(data, consultorios);
+
+    capaEntidades = L.geoJSON(entidadesConConsultorios, {
       style: estiloEntidad,
       onEachFeature: onEachFeatureEntidad
     }).addTo(map);
@@ -738,11 +879,17 @@ fetch("data/unidades_publicas.geojson")
 
 indicadorSelect.addEventListener("change", (e) => {
   indicadorActual = e.target.value;
+  actualizarDisponibilidadSector();
   actualizarMapaIndices();
 });
 
 sectorSelect.addEventListener("change", (e) => {
-  sectorActual = e.target.value;
+  if (indicadorActual === "consultorios") {
+    sectorActual = "publico";
+    sectorSelect.value = "publico";
+  } else {
+    sectorActual = e.target.value;
+  }
   actualizarMapaIndices();
 });
 
